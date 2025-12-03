@@ -1,0 +1,26 @@
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy source code
+COPY . .
+
+# Install the package in editable mode
+RUN pip install -e .
+
+# Default command
+# Expose Streamlit port
+EXPOSE 8501
+
+# Default command
+CMD ["streamlit", "run", "src/hitl/streamlit_app.py", "--server.address=0.0.0.0"]

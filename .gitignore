@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Env
+venv/
+env/
+ENV/
+.env
+.venv
+.anaconda
+.conda
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Project Specific
+teach_me_rain/data/
+teach_me_rain/logs/
+teach_me_rain/checkpoints/
+
+# Model weights and large files
+*.pth
+*.ckpt
+*.onnx
+
+# Generated images (unless in assets)
+*.png
+*.jpg
+*.jpeg
+!teach_me_rain/assets/**/*.png
+
+# System
+Thumbs.db

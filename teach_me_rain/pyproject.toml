@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "teach_me_rain"
+version = "0.1.0"
+description = "Human-in-the-Loop active learning for traffic sign recognition in rain"
+authors = [{name = "Antigravity", email = "antigravity@deepmind.com"}]
+dependencies = [
+    "torch",
+    "torchvision",
+    "albumentations",
+    "numpy",
+    "scipy",
+    "scikit-learn",
+    "streamlit",
+    "tensorboard",
+    "matplotlib",
+    "seaborn",
+    "tqdm"
+]
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
