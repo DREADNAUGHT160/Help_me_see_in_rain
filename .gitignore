@@ -37,9 +37,9 @@ ENV/
 .DS_Store
 
 # Project Specific
-teach_me_rain/data/
-teach_me_rain/logs/
-teach_me_rain/checkpoints/
+data/
+logs/
+checkpoints/
 
 # Model weights and large files
 *.pth
@@ -50,7 +50,7 @@ teach_me_rain/checkpoints/
 *.png
 *.jpg
 *.jpeg
-!teach_me_rain/assets/**/*.png
+!assets/**/*.png
 
 # System
 Thumbs.db
