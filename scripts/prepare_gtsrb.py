@@ -4,6 +4,10 @@ import random
 from pathlib import Path
 import torchvision
 from tqdm import tqdm
+import sys
+# Add project root to path so we can import src
+sys.path.append(str(Path(__file__).parent.parent))
+
 from src.config import RAW_DATA_DIR, CLEAR_DATA_DIR
 
 def prepare_gtsrb():
