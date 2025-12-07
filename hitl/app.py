@@ -16,7 +16,8 @@ from src.config import (
     RAINY_DATA_DIR, 
     UNCERTAIN_SAMPLES_DIR, 
     NUM_CLASSES,
-    EPOCHS
+    EPOCHS,
+    GTSRB_CLASSES
 )
 
 st.set_page_config(layout="wide", page_title="Teach Me to See in Rain")
@@ -173,28 +174,33 @@ def main():
             st.image(str(img_path), caption=f"Uncertain: {img_path.name}", width=400)
             
         with c2:
-            st.info("👇 Click the matching class button below.")
+            st.info("👇 Select the correct class for the image.")
             
-            # Show a reference gallery in an expander
-            with st.expander("Show Reference Classes", expanded=True):
-                # We can't show all 43, maybe show a grid or allow user to filter
-                # For now, let's just show the buttons, and if they hover/click we could ideally show.
-                # Streamlit buttons don't support hover images easily.
-                # Let's show a select box to "Preview Class"
-                preview_class = st.selectbox("Preview Reference Class", range(NUM_CLASSES))
+            # Reference Viewer
+            with st.expander("Show Reference Class Helper", expanded=True):
+                # Using names in selectbox
+                options = [f"{i}: {GTSRB_CLASSES.get(i, 'Unknown')}" for i in range(NUM_CLASSES)]
+                selected_option = st.selectbox("Preview Reference Class", options)
+                
+                # Extract ID from string "0: Name"
+                preview_class = int(selected_option.split(":")[0])
+                
                 ref_img = get_reference_image(preview_class)
                 if ref_img:
-                    st.image(str(ref_img), caption=f"Reference for Class {preview_class}", width=150)
+                    st.image(str(ref_img), caption=f"Reference: {GTSRB_CLASSES[preview_class]}", width=150)
                 else:
                     st.warning("No reference image found.")
 
             st.write("### Assign Label")
-            # Grid of buttons
-            # Create 8 columns for buttons
-            btn_cols = st.columns(8)
+            
+            # Grid of buttons with names
+            # 3 columns to fit names better
+            btn_cols = st.columns(3)
             for i in range(NUM_CLASSES):
-                with btn_cols[i % 8]:
-                    if st.button(f"{i}", key=f"cls_{i}", help=f"Label as Class {i}"):
+                class_name = GTSRB_CLASSES.get(i, f"Class {i}")
+                with btn_cols[i % 3]:
+                    # Button label: "ID: Name"
+                    if st.button(f"{i}: {class_name}", key=f"cls_{i}", use_container_width=True):
                         move_image(img_path, i)
                         st.rerun()
             
@@ -211,7 +217,8 @@ def move_image(img_path, class_id):
     target_dir.mkdir(parents=True, exist_ok=True)
     target_path = target_dir / img_path.name
     shutil.move(str(img_path), str(target_path))
-    st.toast(f"✅ Labeled {img_path.name} as Class {class_id}")
+    class_name = GTSRB_CLASSES.get(class_id, f"Class {class_id}")
+    st.toast(f"✅ Labeled as: {class_name}")
 
 if __name__ == "__main__":
     main()
