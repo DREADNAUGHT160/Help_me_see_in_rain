@@ -1,73 +1,218 @@
 import streamlit as st
 import os
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 from PIL import Image
-import sys
+import pandas as pd
+import random
 
 # Add project root to path
 sys.path.append(str(Path(__file__).parent.parent))
-from src.config import UNCERTAIN_SAMPLES_DIR, CLEAR_DATA_DIR, NUM_CLASSES
+from src.config import (
+    PROJECT_ROOT, 
+    CLEAR_DATA_DIR, 
+    RAINY_DATA_DIR, 
+    UNCERTAIN_SAMPLES_DIR, 
+    NUM_CLASSES,
+    EPOCHS
+)
+
+st.set_page_config(layout="wide", page_title="Teach Me to See in Rain")
+
+def run_command(command, desc):
+    """Runs a shell command and streams output to streamlit."""
+    st.info(f"Running: {desc}...")
+    
+    # We use a placeholder to update output
+    out_placeholder = st.empty()
+    
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        cwd=PROJECT_ROOT,
+        shell=True
+    )
+    
+    output_log = []
+    
+    while True:
+        line = process.stdout.readline()
+        if not line and process.poll() is not None:
+            break
+        if line:
+            output_log.append(line.strip())
+            # Keep only last 10 lines for cleaner UI
+            out_placeholder.code("\n".join(output_log[-10:]))
+            
+    if process.returncode == 0:
+        st.success(f"✅ {desc} Completed Successfully!")
+    else:
+        stderr = process.stderr.read()
+        st.error(f"❌ {desc} Failed!\nError: {stderr}")
+
+def get_stats():
+    """Calculates dataset statistics."""
+    stats = {}
+    
+    # Clear Data Stats
+    if CLEAR_DATA_DIR.exists():
+        clear_count = len(list(CLEAR_DATA_DIR.rglob("*.ppm")))
+        stats['Clear Images'] = clear_count
+    else:
+        stats['Clear Images'] = 0
+        
+    # Rainy Data Stats
+    if RAINY_DATA_DIR.exists():
+        rainy_count = len(list(RAINY_DATA_DIR.rglob("*.ppm")))
+        stats['Rainy Pool'] = rainy_count
+    else:
+        stats['Rainy Pool'] = 0
+        
+    # Uncertain Samples
+    if UNCERTAIN_SAMPLES_DIR.exists():
+        uncertain_count = len(list(UNCERTAIN_SAMPLES_DIR.glob("*.ppm")))
+        stats['To Label'] = uncertain_count
+    else:
+        stats['To Label'] = 0
+        
+    return stats
+
+def get_reference_image(class_id):
+    """Finds a clear reference image for the given class."""
+    class_dir = CLEAR_DATA_DIR / "train" / f"{class_id:05d}"
+    if not class_dir.exists():
+        return None
+    
+    images = list(class_dir.glob("*.ppm"))
+    if not images:
+        return None
+        
+    # Pick a random one or the first one
+    return random.choice(images)
 
 def main():
-    st.title("Human-in-the-Loop Labeling")
-    st.markdown("Label the uncertain samples to improve the model.")
-
-    if not UNCERTAIN_SAMPLES_DIR.exists():
-        st.warning(f"No uncertain samples directory found at {UNCERTAIN_SAMPLES_DIR}")
-        return
-
-    # Get list of images
-    images = list(UNCERTAIN_SAMPLES_DIR.glob("*.ppm"))
+    st.sidebar.title("🌧️ Rain Command Center")
     
-    if not images:
-        st.success("No images left to label! Great job.")
-        if st.button("Refresh"):
-            st.rerun()
-        return
-
-    # Show progress
-    st.sidebar.write(f"Remaining images: {len(images)}")
-
-    # Pick the first image
-    img_path = images[0]
-    
-    col1, col2 = st.columns([1, 1])
-    
-    with col1:
-        st.image(str(img_path), caption=img_path.name, width=300)
-
-    with col2:
-        st.write("### Select Class")
+    stats = get_stats()
+    st.sidebar.markdown("### Status")
+    for k, v in stats.items():
+        st.sidebar.metric(k, v)
         
-        # Grid layout for buttons
-        cols = st.columns(4)
-        for class_id in range(NUM_CLASSES):
-            with cols[class_id % 4]:
-                if st.button(f"{class_id}", key=f"btn_{class_id}"):
-                    move_image(img_path, class_id)
-                    st.rerun()
+    tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "⚙️ Pipeline", "🏷️ Labeling"])
+    
+    # --- TAB 1: DASHBOARD ---
+    with tab1:
+        st.markdown("### Project Overview")
+        st.markdown(f"""
+        This dashboard allows you to manage the entire lifecycle of the 'See in Rain' project.
+        - **Total Classes**: {NUM_CLASSES}
+        - **Current Configured Epochs**: {EPOCHS}
+        """)
+        
+        # Simple chart if data exists
+        if stats['Clear Images'] > 0:
+            chart_data = pd.DataFrame({
+                'Dataset': ['Clear', 'Rainy Pool', 'Waiting Label'],
+                'Count': [stats['Clear Images'], stats['Rainy Pool'], stats['To Label']]
+            })
+            st.bar_chart(chart_data.set_index('Dataset'))
 
-    if st.button("Skip"):
-        # Move to end of list or just ignore for now (implementation detail: shuffling or similar)
-        # For simple file list, maybe just rename it to .skipped or move to another folder
-        # Here we just pass, it will show up again next refresh unless we act.
-        # Let's move it to a 'skipped' folder
-        skipped_dir = UNCERTAIN_SAMPLES_DIR.parent / "skipped"
-        skipped_dir.mkdir(exist_ok=True)
-        shutil.move(str(img_path), str(skipped_dir / img_path.name))
-        st.rerun()
+    # --- TAB 2: PIPELINE ---
+    with tab2:
+        st.header("Pipeline Controls")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.subheader("1. Rain Generation")
+            st.markdown("Generate synthetic rainy data from the clear dataset.")
+            if st.button("Generate Rain 🌧️"):
+                run_command("python scripts/generate_rain.py", "Rain Generation")
+                st.rerun()
+
+        with col2:
+            st.subheader("2. Train Model")
+            st.markdown(f"Train ResNet18 on the clear dataset (Epochs: {EPOCHS}).")
+            if st.button("Run Training 🚀"):
+                run_command("python train.py", "Model Training")
+
+        with col3:
+            st.subheader("3. Active Learning")
+            st.markdown("Identify the most uncertain rainy samples.")
+            if st.button("Find Uncertain Samples 🔍"):
+                run_command("python active_learning.py", "Uncertainty Sampling")
+                st.rerun()
+
+    # --- TAB 3: LABELING ---
+    with tab3:
+        st.header("Human-in-the-Loop Labeling")
+        
+        if not UNCERTAIN_SAMPLES_DIR.exists():
+            st.warning("No uncertain samples directory found.")
+            return
+
+        images = list(UNCERTAIN_SAMPLES_DIR.glob("*.ppm"))
+        
+        if not images:
+            st.success("🎉 No images left to label! You've cleared the queue.")
+            if st.button("Refresh Queue"):
+                st.rerun()
+            return
+
+        # Labeling Interface
+        img_path = images[0]
+        
+        # Main Layout: Image Left, Controls Right
+        c1, c2 = st.columns([1, 2])
+        
+        with c1:
+            st.image(str(img_path), caption=f"Uncertain: {img_path.name}", width=400)
+            
+        with c2:
+            st.info("👇 Click the matching class button below.")
+            
+            # Show a reference gallery in an expander
+            with st.expander("Show Reference Classes", expanded=True):
+                # We can't show all 43, maybe show a grid or allow user to filter
+                # For now, let's just show the buttons, and if they hover/click we could ideally show.
+                # Streamlit buttons don't support hover images easily.
+                # Let's show a select box to "Preview Class"
+                preview_class = st.selectbox("Preview Reference Class", range(NUM_CLASSES))
+                ref_img = get_reference_image(preview_class)
+                if ref_img:
+                    st.image(str(ref_img), caption=f"Reference for Class {preview_class}", width=150)
+                else:
+                    st.warning("No reference image found.")
+
+            st.write("### Assign Label")
+            # Grid of buttons
+            # Create 8 columns for buttons
+            btn_cols = st.columns(8)
+            for i in range(NUM_CLASSES):
+                with btn_cols[i % 8]:
+                    if st.button(f"{i}", key=f"cls_{i}", help=f"Label as Class {i}"):
+                        move_image(img_path, i)
+                        st.rerun()
+            
+            st.divider()
+            if st.button("Skip / Not Sure"):
+                skipped_dir = UNCERTAIN_SAMPLES_DIR.parent / "skipped"
+                skipped_dir.mkdir(exist_ok=True)
+                shutil.move(str(img_path), str(skipped_dir / img_path.name))
+                st.rerun()
 
 def move_image(img_path, class_id):
     """Moves image to the training directory of the selected class."""
     target_dir = CLEAR_DATA_DIR / "train" / f"{class_id:05d}"
     target_dir.mkdir(parents=True, exist_ok=True)
-    
     target_path = target_dir / img_path.name
-    
-    # Move file
     shutil.move(str(img_path), str(target_path))
-    st.toast(f"Labeled {img_path.name} as Class {class_id}")
+    st.toast(f"✅ Labeled {img_path.name} as Class {class_id}")
 
 if __name__ == "__main__":
     main()
+
