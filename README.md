@@ -9,10 +9,9 @@ Improve the robustness of a traffic sign classifier (ResNet-18) on rainy images 
 
 1. **Install Dependencies**:
    ```bash
-   pip install -e .
+   pip install -r requirements.txt
    ```
-   > [!NOTE]
-   > This project supports CUDA (NVIDIA GPUs) and MPS (Mac Silicon). The device is automatically detected in `src/config.py`.
+   *(Ensure `torch`, `torchvision`, `albumentations`, `streamlit` are installed)*
 
 2. **Prepare Data**:
    Download GTSRB and create the clear dataset:
@@ -21,7 +20,7 @@ Improve the robustness of a traffic sign classifier (ResNet-18) on rainy images 
    ```
    Generate synthetic rainy data (unlabeled pool):
    ```bash
-   python scripts/make_rainy_dataset.py
+   python scripts/generate_rain.py
    ```
 
 ## Usage
@@ -29,41 +28,31 @@ Improve the robustness of a traffic sign classifier (ResNet-18) on rainy images 
 ### 1. Train Baseline
 Train the model on clear data only:
 ```bash
-python src/experiments/run_baseline.py
+python train.py
 ```
-This will save checkpoints to `checkpoints/baseline/` and logs to `logs/baseline/`.
+This will save the trained model to `model.pth`.
 
 ### 2. Active Learning Loop
 Run the active learning loop to select uncertain rainy images:
 ```bash
-python src/experiments/run_active_loop.py
+python active_learning.py
 ```
 This will:
-- Load the baseline model.
-- Predict on the rainy pool.
+- Load the baseline model (`model.pth`).
+- Predict on the rainy pool (`data/rainy`).
 - Select top-k uncertain samples.
 - Save them to `data/hits/uncertain_samples`.
 
 ### 3. Human-in-the-Loop Labeling
 Launch the Streamlit UI to label the selected images:
 ```bash
-streamlit run src/hitl/streamlit_app.py
+streamlit run hitl/app.py
 ```
 - Label images via the UI.
-- Annotations are saved to `data/hits/annotations.json`.
+- Labeled images are moved to `data/clear/train` to improve the dataset.
 
-### 4. Retrain (Future Work)
-After labeling, you can merge the annotations and fine-tune the model (logic to be implemented in `run_active_loop.py` or a new script).
-
-## Testing
-Run unit tests:
+### 4. Retrain
+After labeling, re-run training to improve the model:
 ```bash
-pytest tests/
-```
-
-## Docker
-Build and run with Docker:
-```bash
-docker build -t teach_me_rain -f docker/Dockerfile.cpu .
-docker run -it teach_me_rain
+python train.py
 ```
