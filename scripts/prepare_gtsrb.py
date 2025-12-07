@@ -24,8 +24,8 @@ def prepare_gtsrb():
     )
     
     # Path to the downloaded images
-    # torchvision downloads to <root>/gtsrb/GTSRB/Final_Training/Images
-    source_dir = RAW_DATA_DIR / "gtsrb" / "GTSRB" / "Final_Training" / "Images"
+    # Actual structure is <root>/gtsrb/GTSRB/Training/<class_id>
+    source_dir = RAW_DATA_DIR / "gtsrb" / "GTSRB" / "Training"
     
     if not source_dir.exists():
         print(f"Error: Expected source directory {source_dir} does not exist.")
