@@ -16,7 +16,7 @@ NUM_CLASSES = 43  # GTSRB has 43 classes
 IMG_SIZE = (64, 64)
 BATCH_SIZE = 64
 LEARNING_RATE = 0.001
-EPOCHS = 10
+EPOCHS = 1
 import torch
 if torch.cuda.is_available():
     DEVICE = "cuda"

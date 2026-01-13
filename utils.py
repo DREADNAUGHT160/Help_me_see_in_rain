@@ -11,7 +11,8 @@ rain_aug = A.RandomRain(
     drop_width=1,
     blur_value=3,
     rain_type="heavy",
-    always_apply=True,
+    # always_apply=True, # Deprecated/Invalid
+    p=1.0, # Use p=1.0 instead for always apply
 )
 
 

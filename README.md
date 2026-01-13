@@ -7,18 +7,38 @@ Improve the robustness of a traffic sign classifier (ResNet-18) on rainy images 
 
 ## Setup
 
+### One-Click Setup (Recommended)
+**Windows**:
+Double-click `setup.bat` or run:
+```bash
+setup.bat
+```
+
+**Linux/Mac**:
+```bash
+chmod +x setup.sh
+./setup.sh
+```
+
+This will automatically:
+1. Install all Python dependencies.
+2. Download and prepare the GTSRB dataset.
+3. Generate the synthetic rainy dataset.
+
+---
+
+### Manual Setup (Optional)
+If you prefer to run steps manually:
+
 1. **Install Dependencies**:
    ```bash
    pip install -r requirements.txt
    ```
-   *(Ensure `torch`, `torchvision`, `albumentations`, `streamlit` are installed)*
-
 2. **Prepare Data**:
-   Download GTSRB and create the clear dataset:
    ```bash
    python scripts/prepare_gtsrb.py
    ```
-   Generate synthetic rainy data (unlabeled pool):
+3. **Generate Rain**:
    ```bash
    python scripts/generate_rain.py
    ```

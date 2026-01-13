@@ -7,6 +7,8 @@ from pathlib import Path
 from PIL import Image
 import pandas as pd
 import random
+import json
+import time
 
 # Add project root to path
 sys.path.append(str(Path(__file__).parent.parent))
@@ -24,36 +26,42 @@ st.set_page_config(layout="wide", page_title="Teach Me to See in Rain")
 
 def run_command(command, desc):
     """Runs a shell command and streams output to streamlit."""
-    st.info(f"Running: {desc}...")
     
-    # We use a placeholder to update output
-    out_placeholder = st.empty()
-    
-    process = subprocess.Popen(
-        command,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        cwd=PROJECT_ROOT,
-        shell=True
-    )
-    
-    output_log = []
-    
-    while True:
-        line = process.stdout.readline()
-        if not line and process.poll() is not None:
-            break
-        if line:
-            output_log.append(line.strip())
-            # Keep only last 10 lines for cleaner UI
-            out_placeholder.code("\n".join(output_log[-10:]))
-            
-    if process.returncode == 0:
-        st.success(f"✅ {desc} Completed Successfully!")
-    else:
-        stderr = process.stderr.read()
-        st.error(f"❌ {desc} Failed!\nError: {stderr}")
+    with st.status(f"Running {desc}...", expanded=True) as status:
+        st.write("Initializing...")
+        
+        # We use a placeholder to update output
+        out_placeholder = st.empty()
+        
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            cwd=PROJECT_ROOT,
+            shell=True
+        )
+        
+        output_log = []
+        
+        while True:
+            line = process.stdout.readline()
+            if not line and process.poll() is not None:
+                break
+            if line:
+                output_log.append(line.strip())
+                # Keep only last 10 lines for cleaner UI
+                out_placeholder.code("\n".join(output_log[-10:]))
+                
+        if process.returncode == 0:
+            status.update(label=f"✅ {desc} Completed!", state="complete", expanded=False)
+            st.success(f"{desc} Finished Successfully.")
+            return True
+        else:
+            stderr = process.stderr.read()
+            status.update(label=f"❌ {desc} Failed!", state="error", expanded=True)
+            st.error(f"Error: {stderr}")
+            return False
 
 def get_stats():
     """Calculates dataset statistics."""
@@ -108,70 +116,165 @@ def main():
     # --- TAB 1: DASHBOARD ---
     with tab1:
         st.markdown("### Project Overview")
-        st.markdown(f"""
-        This dashboard allows you to manage the entire lifecycle of the 'See in Rain' project.
-        - **Total Classes**: {NUM_CLASSES}
-        - **Current Configured Epochs**: {EPOCHS}
-        """)
         
-        # Simple chart if data exists
-        if stats['Clear Images'] > 0:
-            chart_data = pd.DataFrame({
-                'Dataset': ['Clear', 'Rainy Pool', 'Waiting Label'],
-                'Count': [stats['Clear Images'], stats['Rainy Pool'], stats['To Label']]
-            })
-            st.bar_chart(chart_data.set_index('Dataset'))
+        # Top level metrics
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Total Classes", NUM_CLASSES)
+        m2.metric("Clear Images", stats['Clear Images'])
+        m3.metric("Rainy Pool", stats['Rainy Pool'])
+
+        st.divider()
+        
+        # Training History
+        log_file = PROJECT_ROOT / "logs" / "training_history.csv"
+        if log_file.exists():
+            df = pd.read_csv(log_file)
+            
+            st.subheader("📈 Training Progress")
+            
+            # Key Stats
+            best_acc = df['Val_Acc'].max() if 'Val_Acc' in df.columns else (df['Accuracy'].max() if 'Accuracy' in df.columns else 0)
+            latest_loss = df['Val_Loss'].iloc[-1] if 'Val_Loss' in df.columns else (df['Loss'].iloc[-1] if 'Loss' in df.columns else 0)
+            total_runs = len(df)
+            
+            k1, k2, k3 = st.columns(3)
+            k1.metric("Best Val Accuracy", f"{best_acc:.2f}%")
+            k2.metric("Latest Val Loss", f"{latest_loss:.4f}")
+            k3.metric("Total Runs", total_runs)
+            
+            # Charts
+            # Check if we have new format or old format
+            if 'Val_Acc' in df.columns:
+                 # Comparison Chart
+                chart_df = df[['Run_ID', 'Train_Acc', 'Val_Acc']].copy()
+                chart_df.set_index('Run_ID', inplace=True)
+                st.bar_chart(chart_df)
+            else:
+                st.line_chart(df.set_index('Epoch')[['Accuracy', 'Loss']])
+            
+            with st.expander("View Raw Logs"):
+                st.dataframe(df.sort_values(by=['Timestamp'], ascending=False), use_container_width=True)
+        else:
+            st.info("No training logs found yet. Run training to see metrics here.")
 
     # --- TAB 2: PIPELINE ---
     with tab2:
         st.header("Pipeline Controls")
         
+        # Configuration
+        with st.expander("⚙️ Configuration", expanded=True):
+            st.write("Customize your pipeline parameters.")
+            c1, c2 = st.columns(2)
+            with c1:
+                strategy = st.selectbox(
+                    "Active Learning Strategy", 
+                    ["entropy", "least_confidence", "margin", "random"],
+                    index=0,
+                    help="Criteria for selecting uncertain samples."
+                )
+            with c2:
+                epochs = st.slider("Training Epochs", min_value=1, max_value=50, value=EPOCHS)
+        
+        st.divider()
+        
         col1, col2, col3 = st.columns(3)
         
         with col1:
             st.subheader("1. Rain Generation")
-            st.markdown("Generate synthetic rainy data from the clear dataset.")
-            if st.button("Generate Rain 🌧️"):
-                run_command("python scripts/generate_rain.py", "Rain Generation")
-                st.rerun()
+            st.markdown("Generate synthetic rainy data.")
+            if st.button("Generate Rain 🌧️", use_container_width=True):
+                if run_command("python scripts/generate_rain.py", "Rain Generation"):
+                    time.sleep(1)
+                    st.rerun()
 
         with col2:
             st.subheader("2. Train Model")
-            st.markdown(f"Train ResNet18 on the clear dataset (Epochs: {EPOCHS}).")
-            if st.button("Run Training 🚀"):
-                run_command("python train.py", "Model Training")
+            st.markdown(f"Train ResNet18 on clear data.")
+            if st.button("Run Training 🚀", use_container_width=True):
+                run_command(f"python train.py --epochs {epochs}", "Model Training")
 
         with col3:
             st.subheader("3. Active Learning")
-            st.markdown("Identify the most uncertain rainy samples.")
-            if st.button("Find Uncertain Samples 🔍"):
-                run_command("python active_learning.py", "Uncertainty Sampling")
+            st.markdown("Identify uncertain samples.")
+            if st.button("Find Uncertain Samples 🔍", use_container_width=True):
+                cmd = f"python active_learning.py --strategy {strategy}"
+                if run_command(cmd, "Uncertainty Sampling"):
+                    time.sleep(1)
+                    st.rerun()
+
+        st.divider()
+        
+        # Danger Zone
+        with st.expander("🚨 Danger Zone", expanded=False):
+            if st.button("Reset Project (Clear Logs & Models)", type="primary"):
+                # Delete logs
+                if (PROJECT_ROOT / "logs").exists():
+                    shutil.rmtree(PROJECT_ROOT / "logs")
+                # Delete model
+                if (PROJECT_ROOT / "model.pth").exists():
+                    (PROJECT_ROOT / "model.pth").unlink()
+                # Delete metrics
+                if (UNCERTAIN_SAMPLES_DIR / "metrics.json").exists():
+                    (UNCERTAIN_SAMPLES_DIR / "metrics.json").unlink()
+                    
+                st.warning("Project reset! Please train a new model.")
+                time.sleep(2)
                 st.rerun()
 
     # --- TAB 3: LABELING ---
     with tab3:
         st.header("Human-in-the-Loop Labeling")
         
-        if not UNCERTAIN_SAMPLES_DIR.exists():
-            st.warning("No uncertain samples directory found.")
-            return
-
+        # Check if we have samples
         images = list(UNCERTAIN_SAMPLES_DIR.glob("*.ppm"))
+        metrics_file = UNCERTAIN_SAMPLES_DIR / "metrics.json"
         
-        if not images:
-            st.success("🎉 No images left to label! You've cleared the queue.")
-            if st.button("Refresh Queue"):
-                st.rerun()
+        if not images or not metrics_file.exists():
+            st.info("👋 No uncertain samples found waiting for review.")
+            st.markdown("""
+            **How to get started:**
+            1. Go to the **Pipeline** tab.
+            2. Train a model (if not already done).
+            3. Click **Find Uncertain Samples**.
+            """)
             return
-
-        # Labeling Interface
-        img_path = images[0]
+        else:
+            # Load first image
+            img_path = images[0]
         
+        # Load Metrics if available
+        metrics = {}
+        metrics_file = UNCERTAIN_SAMPLES_DIR / "metrics.json"
+        if metrics_file.exists():
+            with open(metrics_file, "r") as f:
+                metrics = json.load(f)
+        
+        img_metric = metrics.get(img_path.name, {})
+        score = img_metric.get("score", "N/A")
+        strategy_used = img_metric.get("strategy", "Unknown")
+        pred_class_id = img_metric.get("predicted_class", None)
+        confidence = img_metric.get("confidence", None)
+        
+        pred_text = "N/A"
+        if pred_class_id is not None:
+             class_name = GTSRB_CLASSES.get(pred_class_id, f"Class {pred_class_id}")
+             pred_text = f"**{class_name}** ({confidence*100:.1f}%)"
+
         # Main Layout: Image Left, Controls Right
-        c1, c2 = st.columns([1, 2])
+        c1, c2 = st.columns([1, 1.5])
         
         with c1:
-            st.image(str(img_path), caption=f"Uncertain: {img_path.name}", width=400)
+            st.image(str(img_path), width=400)
+            st.caption(f"**File:** {img_path.name}")
+            
+            # Metric Card
+            st.info(f"""
+            **Uncertainty Score**: {score}  
+            *(Strategy: {strategy_used})*  
+            
+            **Model Prediction**:  
+            {pred_text}
+            """)
             
         with c2:
             st.info("👇 Select the correct class for the image.")
